@@ -1,153 +1,168 @@
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.rmi.Naming; 
-import java.rmi.RemoteException; 
-import java.net.MalformedURLException; 
-import java.rmi.NotBoundException; 
-import java.util.Arrays;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
+import java.awt.BorderLayout;
+import java.awt.GridLayout;
+import java.rmi.Naming;
 
- 
-public class VotingClient 
-{ 
+public class VotingClient {
 
-	public static int nvoter;
-	public static int nvotes;
-	public static String [][]cand;
-	public static int [][]voter;
-	public static void main(String[] args) 
-	{ 
-	        try 
-		{ 
-			VotingSystem c = (VotingSystem)Naming.lookup("rmi://localhost/VotingService"); 
-                        int temp=c.initialise() ;
-			if(temp==0)
-    				System.out.println("Succesfull");
-	    		else
-	    			System.out.println("Failed");	
-            		System.out.println( "Welcome");
+	public static void main(String[] args) {
+		SwingUtilities.invokeLater(() -> {
+			try {
+				VotingSystem service = (VotingSystem) Naming.lookup("rmi://localhost:1099/VotingService");
+				new VotingClientWindow(service).setVisible(true);
+			} catch (Exception ex) {
+				JOptionPane.showMessageDialog(null, "Unable to connect to RMI server: " + ex.getMessage(), "Connection error",
+						JOptionPane.ERROR_MESSAGE);
+			}
+		});
+	}
 
-	    		while(true)
-			{
-				System.out.println("**************************************************************************"); 
-				System.out.println(" 1.Register \n 2.Cast Vote \n 3.Candidate List \n 4.Vote Count \n 5.Exit");
-		 		System.out.println("**************************************************************************"); 
-            			System.out.println("Enter your choice");  
-	 	 		try
-				{
-					InputStreamReader isr = new InputStreamReader(System.in);
-					BufferedReader br = new BufferedReader(isr);
-					String s1 = br.readLine();
-	        			int input1=Integer.parseInt(s1);
-	  				switch(input1)
-					{
-						case 1: System.out.println("Enter your voterid");
-						String s2 = br.readLine();
-	      		        		int input2=Integer.parseInt(s2);
-						int temp1=c.register(input2);
-						if(temp1==0) 
-							System.out.println(" Successfully registered");
-						else if(temp1==1) 
-							System.out.println(" Voterid also exists!");
-						else 
-							System.out.println("error try again!!");
-						break;
+	private static final class VotingClientWindow extends JFrame {
+		private final JTextField voterIdField = new JTextField();
+		private final JTextField candidateField = new JTextField();
+		private final JTextArea outputArea = new JTextArea();
 
-						case 2:	System.out.println("Enter the name of the candidate:");
-						String s3= br.readLine();
-						System.out.println("Enter your VoterID:");
-						String s4= br.readLine();
-						int input3=Integer.parseInt(s4);
-						int temp2=c.castvote(s3.toUpperCase(),input3);
-						if(temp2==0) 
-							System.out.println("Successfuly voted");
-						else if(temp2==1) 
-							System.out.println("Candidate added successfully and voted");
-						else if(temp2==2)
-							System.out.println("Voter not registered Please register");
-						else if(temp2==3) 
-							System.out.println("You have already voted. duplicate votes not counted.");
-						else if(temp2==4)
-							System.out.println("Error please try again");
-						break;
+		private VotingClientWindow(VotingSystem service) {
+			super("Voting System RMI Demo");
+			setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+			setSize(820, 620);
+			setLocationRelativeTo(null);
+			setLayout(new BorderLayout(12, 12));
+			((JPanel) getContentPane()).setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
+			final VotingSystem remote = service;
 
-						case 3: String [][]temp5=c.candidatelist();
-							if(temp5[0][0]==null) 
-							{
-								System.out.println(" no canditate exists ");
-								break;
-							}
-							for (int i1=0; i1<temp5.length; i1++) 
-							{
-								if(temp5[i1][0]==null)
-								{
-									break;
-								}
-								for (int j1=0; j1<temp5[i1].length; j1++) 
-								{
-									if(temp5[i1][j1]!=null)
-					   				     System.out.print(" " + temp5[i1][j1]);
-									else	
-										break;
-								}
-					
-							System.out.println("");
-		 					}
+			JPanel formPanel = new JPanel(new GridLayout(0, 1, 10, 10));
+			formPanel.add(new JLabel("Voter ID"));
+			formPanel.add(voterIdField);
+			formPanel.add(new JLabel("Candidate Name"));
+			formPanel.add(candidateField);
 
-							break;
-	
-						case 4:System.out.println("Enter the name of the candidate:");
-						String s5= br.readLine();
-						int temp3=c.votecount(s5.toUpperCase());
-						if(temp3!=-1) 
-							System.out.println("total vote for selected candidate:"+temp3);
-						else 
-							System.out.println("Candidate not present");
-						break;
-	
-						case 5: System.exit(0);
-						default: System.out.println("invalid input");
-			
+			JPanel buttonPanel = new JPanel(new GridLayout(0, 2, 10, 10));
+			JButton registerButton = new JButton("Register Voter");
+			JButton voteButton = new JButton("Cast Vote");
+			JButton listButton = new JButton("Show Candidate List");
+			JButton countButton = new JButton("Vote Count");
+			JButton resetButton = new JButton("Reset Election");
+			JButton refreshButton = new JButton("Refresh Status");
+
+			buttonPanel.add(registerButton);
+			buttonPanel.add(voteButton);
+			buttonPanel.add(listButton);
+			buttonPanel.add(countButton);
+			buttonPanel.add(resetButton);
+			buttonPanel.add(refreshButton);
+
+			JPanel left = new JPanel(new BorderLayout(10, 10));
+			left.add(formPanel, BorderLayout.NORTH);
+			left.add(buttonPanel, BorderLayout.CENTER);
+
+			outputArea.setEditable(false);
+			outputArea.setLineWrap(true);
+			outputArea.setWrapStyleWord(true);
+			JScrollPane scrollPane = new JScrollPane(outputArea);
+			outputArea.setText("Connected to RMI service. Use the buttons to exercise remote calls.");
+
+			add(left, BorderLayout.WEST);
+			add(scrollPane, BorderLayout.CENTER);
+
+			registerButton.addActionListener(event -> runRemote(() -> {
+				int voterId = readVoterId();
+				int result = remote.register(voterId);
+				if (result == 0) {
+					append("Registered voter " + voterId);
+				} else {
+					append("Voter already exists: " + voterId);
+				}
+			}));
+
+			voteButton.addActionListener(event -> runRemote(() -> {
+				int voterId = readVoterId();
+				String candidate = readCandidate();
+				int result = remote.castvote(candidate, voterId);
+				if (result == 0) {
+					append("Vote recorded for existing candidate: " + candidate.toUpperCase());
+				} else if (result == 1) {
+					append("New candidate added and vote recorded: " + candidate.toUpperCase());
+				} else if (result == 2) {
+					append("Voter is not registered.");
+				} else if (result == 3) {
+					append("This voter has already voted.");
+				} else {
+					append("Unable to cast vote.");
+				}
+			}));
+
+			listButton.addActionListener(event -> runRemote(() -> {
+				String[][] list = remote.candidatelist();
+				if (list.length == 0) {
+					append("No candidates yet.");
+					return;
+				}
+				StringBuilder builder = new StringBuilder();
+				builder.append("Candidate list:\n");
+				for (String[] row : list) {
+					if (row[0] == null) {
+						continue;
 					}
+					builder.append(row[0]).append(" -> ").append(row[1]).append(" votes\n");
 				}
-				catch(Exception ex)
-				{ 
-					System.out.println("Please enter a valid input"); 
-					continue;
+				append(builder.toString().trim());
+			}));
+
+			countButton.addActionListener(event -> runRemote(() -> {
+				String candidate = readCandidate();
+				int count = remote.votecount(candidate);
+				if (count < 0) {
+					append("Candidate not found: " + candidate.toUpperCase());
+				} else {
+					append(candidate.toUpperCase() + " currently has " + count + " vote(s).");
 				}
-	  
-			}		      
-		} 
-	        catch (MalformedURLException murle) 
-		{ 
-			System.out.println(); 
-		        System.out.println("MalformedURLException"); 
-			System.out.println(murle); 
-	        } 
-		catch (RemoteException re) 
-		{ 
-			System.out.println(); 
-			System.out.println("RemoteException"); 
-			System.out.println(re); 
-		} 
-		catch (NotBoundException nbe) 
-		{ 
-			System.out.println(); 
-			System.out.println("NotBoundException"); 
-            		System.out.println(nbe); 
-		} 
-		catch (java.lang.ArithmeticException ae) 
-		{ 
-			System.out.println(); 
-        		System.out.println("java.lang.ArithmeticException"); 
-            		System.out.println(ae); 
-        	}
- 		catch(IOException ex)
-		{ 
-			System.out.println(ex);
-		} 
+			}));
 
-	} 
-} 
+			resetButton.addActionListener(event -> runRemote(() -> {
+				remote.reset();
+				append("Election reset successfully.");
+			}));
 
+			refreshButton.addActionListener(event -> runRemote(() -> {
+				String[][] list = remote.candidatelist();
+				append("Refreshed. Candidates tracked: " + list.length);
+			}));
+		}
+
+		private void runRemote(RemoteAction action) {
+			try {
+				action.run();
+			} catch (Exception ex) {
+				append("Error: " + ex.getMessage());
+			}
+		}
+
+		private int readVoterId() {
+			return Integer.parseInt(voterIdField.getText().trim());
+		}
+
+		private String readCandidate() {
+			return candidateField.getText().trim();
+		}
+
+		private void append(String message) {
+			outputArea.append(message + "\n");
+			outputArea.setCaretPosition(outputArea.getDocument().getLength());
+		}
+
+		private interface RemoteAction {
+			void run() throws Exception;
+		}
+	}
+}

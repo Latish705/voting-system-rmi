@@ -1,20 +1,129 @@
-Electronic Voting System 
-/* created by Ujwal Manjunath */
+# Distributed Voting System using Java RMI
 
-Description:
-System uses remote procedure Calls to implement a simple elecrtonic election system that allows cluients to vote for their favourite candidate in an election via RMI. The system supports five procedure calls -
+## 1. Introduction
 
-* Intialize()				--Intializes the system
-* Register(voterid)			--register Voterid
-* CastVote(candidatename,voterid)	--if candidate is not already in the system, add the candidate to the system with a vote count of 1, otherwise add 1 to candidate vote 	count.
-* CandidateList				-- returns a list of candidates and their current votes.
-* VoteCount(candidateName0		-- returns the integer vote total for the named candidate.
+The chosen application is a simple electronic voting system for a small college or classroom election. The goal is to let a voter register with a unique voter ID, cast a vote for a candidate, inspect the candidate list, and check the current vote count for any candidate. The system is intentionally kept lightweight because the assignment focuses on distributed communication concepts rather than full production security or scalability.
 
+This project models the voting process as a distributed application with a remote server that owns the election state and a local desktop client that interacts with it over Java RMI. The client performs only user interaction and remote calls, while the server is responsible for maintaining voter registration, candidate records, and vote totals. This separation makes the application a clear example of client/server communication, remote method invocation, and shared state management in a distributed environment.
 
+## 2. Design Diagram
 
-How to run
-1. Compile all the Java files
-2. Run rmiregistry & in your linux machine (for windows usage refer to rmi documentation)
-3. Run command java VotingServer
-4. Open another terminal
-5. And run java VotingClient.
+```mermaid
+flowchart LR
+    U[User / Voter] --> UI[Java Swing Client\nVotingClient]
+    UI -->|RMI Lookup + Remote Calls| RMI[Java RMI Stub / Remote Interface\nVotingSystem]
+    RMI --> SRV[Remote Voting Server\nVotingServer + VotingImpl]
+    SRV --> MEM[(In-Memory Election State)]
+
+    SRV -->|register / castvote / candidatelist / votecount / reset| RMI
+    RMI -->|response / result code / data| UI
+    UI -->|display message / results| U
+```
+
+### Communication View
+
+```mermaid
+sequenceDiagram
+    actor Voter
+    participant Client as Swing Client
+    participant RMI as RMI Runtime
+    participant Server as VotingServer/VotingImpl
+
+    Voter->>Client: Enter voter ID / candidate
+    Client->>RMI: Remote method call
+    RMI->>Server: Invoke register / castvote / list / count
+    Server-->>RMI: Return result/data
+    RMI-->>Client: Reply
+    Client-->>Voter: Show confirmation / vote count
+```
+
+## 3. Working Concept and Layered Communication Architecture
+
+This application works in a layered manner. At the top layer, the user interacts with a Swing-based desktop client. The client accepts voter ID and candidate input and presents results in a simple window. It does not store election state locally and does not directly modify the voting data. Instead, it acts as a presentation and request layer.
+
+The middle layer is Java RMI. The client performs an RMI lookup to find the remote voting service and then calls remote methods such as `register`, `castvote`, `candidatelist`, `votecount`, and `reset`. Java RMI automatically handles stub/proxy behavior, method marshalling, request transmission, and response unmarshalling. This removes the need for manual socket programming and makes the distributed communication transparent to the client code.
+
+The server layer contains `VotingServer` and `VotingImpl`. `VotingServer` starts the RMI registry if needed, binds the remote service, and exposes the voting object. `VotingImpl` contains the election logic and stores the application state in memory. The server is the single source of truth for registered voters, voted voters, and candidate vote totals. Because the server owns the state, every client sees the same election data.
+
+The communication protocol is layered as follows. At the application layer, the system exposes election operations. At the RMI layer, those operations become remote method invocations with parameters and return values. At the transport layer, Java RMI uses TCP-based communication under the hood. At the data handling level, parameters are serialized and deserialized automatically. This layered approach is suitable because it keeps the programming model simple while still demonstrating distributed system concepts such as remote invocation, shared state, and synchronous request/reply behavior.
+
+The project is intentionally in-memory and not database-backed because the assignment is about distributed application design, not persistence. That makes the remote interaction easier to understand and the runtime easier to demonstrate. For a classroom voting module, the server can be reset between demonstrations, and the system remains fast and lightweight.
+
+## 4. Why Java RMI is the Right Communication Model
+
+This project uses **Java RMI** because the whole application is written in Java, the front end is also Java-based, and the assignment specifically requires a distributed application design with clear remote communication. RMI is a strong fit because it allows the client to call server methods as if they were local while still preserving the distributed nature of the system. That makes it ideal for demonstrating client/server separation, remote object access, and request/reply semantics in a simple voting workflow.
+
+### A. Client/Server Design: Stateless or Stateful
+
+The system is **stateful on the server side**. The server keeps the registered voter set, the set of voters who already voted, and the candidate vote map. This is necessary because voting is not useful if the server forgets earlier actions. The client itself is mostly stateless; it collects input and makes calls. RMI fits this design well because the server can expose a remote object that keeps state across invocations.
+
+### B. Server Creation Semantic
+
+The server uses a **singleton-style remote service**. One `VotingImpl` object is created and bound in the registry, and all clients use that same remote object instance. This is the right semantic for an election because all users must share one authoritative vote state. Multiple independent server instances would fragment the election and break consistency.
+
+### C. Persistent and Transient Communication
+
+The communication is **transient** in the network sense because each RMI call is a separate request/reply exchange, but the server-side election state is **persistent during runtime** because it remains alive until the server is reset or stopped. This is a good match for the assignment: the server persists the election session, while the network messages themselves are short-lived.
+
+### D. Synchronous / Asynchronous Communication
+
+The system uses **synchronous request/reply communication**. The client sends a request and waits for the remote method to return a result code or data. This is appropriate for voting because the user needs immediate feedback such as “registered”, “vote recorded”, or “already voted”. Asynchronous communication is not necessary here because the operations are small, interactive, and need immediate confirmation.
+
+### E. Call Semantics
+
+The practical semantics are **at-most-once from the client perspective**, backed by ordinary RMI request/reply behavior. For this assignment, the important point is that the client sends one operation and receives one response, which is easy to reason about. If a call fails, the client can retry, but the server-side logic should remain the authority for whether the operation is accepted.
+
+### F. Concurrent Access to Multiple Servers
+
+The current design targets **one authoritative server**, which is the correct choice for a simple voting assignment. Using multiple independent servers would require replication, consensus, or distributed locking, which is far beyond the intended scope. RMI still demonstrates distributed access while keeping the architecture understandable and correct.
+
+### G. Serving Multiple Requests Simultaneously
+
+The server can serve multiple clients concurrently because RMI dispatches remote invocations through the runtime and the implementation methods are synchronized for consistency. This allows several voters to connect at the same time while protecting shared election data from race conditions.
+
+### H. Reducing Per-Call Workload of Servers
+
+The server workload is small per call because the remote methods perform only direct in-memory updates and lookups. There is no database access, no heavy object graph transfer, and no expensive computation. This is one reason RMI is suitable for a simple voting module. The service can process many small calls efficiently with minimal overhead.
+
+### I. Reply Caching of Idempotent Remote Procedures
+
+Only some procedures are naturally idempotent. For example, `votecount` and `candidatelist` can be repeated safely because they only read server state. In contrast, `register` and `castvote` change the election state and should not be blindly cached by the client, because stale results would be dangerous. RMI gives the right programming model, but the application logic must still distinguish between read-only and state-changing calls.
+
+### J. Proper Selection of Timeout Values
+
+For this application, short timeouts are appropriate because each operation is simple and should complete quickly. If the client cannot reach the server in a few seconds, the user should see an error and try again. Long timeouts would make the user wait unnecessarily, while very small timeouts might be too sensitive to temporary network delays. A balanced timeout is the best fit for a class assignment demo.
+
+### K. Proper Design of RPC Protocol Specification
+
+RMI is essentially Java’s object-oriented RPC mechanism. The protocol design is simple here: remote interface, method signatures, input parameters, return codes, and server-side state validation. The voting operations are well suited to this design because each call has a clear input and output. `register` uses a voter ID, `castvote` uses a candidate name and voter ID, `candidatelist` returns structured data, and `votecount` returns a count. This is a clean RPC specification because it mirrors the business operations directly.
+
+## Why Not Other Communication Models
+
+**CORBA** would be unnecessarily heavy for this assignment because it adds IDL, ORB setup, and cross-language complexity that is not needed for a Java-only project.
+
+**COM/EJB** are not a good fit because they are tied to enterprise or platform-specific infrastructure that would make the demo harder to explain and harder to run.
+
+**gRPC** is modern and efficient, but it is better suited when you want polyglot services, protobuf contracts, and microservice-style APIs. For a simple classroom voting system written fully in Java, it would add more tooling than benefit.
+
+**Raw sockets** would work, but they would hide the object-oriented remote call abstraction that the assignment wants to demonstrate.
+
+Java RMI is the best balance here because it is simple, Java-native, easy to explain, and perfectly matched to a small distributed voting system.
+
+## Summary of the Implementation
+
+- `VotingServer` starts the registry, binds the remote service, and owns the shared election state.
+- `VotingImpl` implements the remote voting operations.
+- `VotingClient` provides a Swing front end and performs remote calls to the server.
+- The system supports voter registration, voting, candidate listing, vote counting, and reset.
+
+## How to Run
+
+1. Compile: `javac *.java`
+2. Start server: `java VotingServer`
+3. Start client UI: `java VotingClient`
+
+## Notes for Submission
+
+- The project is intentionally lightweight and suitable for demonstration.
+- State is kept in memory only.
+- The important learning outcome is the RMI communication model and the client/server separation.

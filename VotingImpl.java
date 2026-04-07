@@ -1,186 +1,94 @@
-import java.util.*;
-import java.lang.*;
+import java.rmi.RemoteException;
+import java.rmi.server.UnicastRemoteObject;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
-public class VotingImpl extends java.rmi.server.UnicastRemoteObject implements VotingSystem 
-{ 
-	
-	public VotingImpl() throws java.rmi.RemoteException 
-	{ 
-	        super(); 
-	} 
+public class VotingImpl extends UnicastRemoteObject implements VotingSystem {
 
-	public int initialise() throws java.rmi.RemoteException 
-	{
-		try
-		{
-			System.out.println ("intializing to zero");
-			VotingClient cc= new VotingClient();
-			cc.nvoter=0;
-			cc.nvotes=0;
-			cc.cand = new String[10][2];
-			cc.voter=new int[100][2];
-			return 0;
-		}
-		catch(Exception ex)
-		{
-		return 1;
-		}
+	private final Map<String, Integer> candidates = new LinkedHashMap<>();
+	private final Set<Integer> registeredVoters = new LinkedHashSet<>();
+	private final Set<Integer> votedVoters = new LinkedHashSet<>();
+
+	public VotingImpl() throws RemoteException {
+		super();
 	}
 
-	public int register(int voterid) throws java.rmi.RemoteException 
-	{
-		try
-		{
-			VotingClient cc1= new VotingClient();
-			int i=0;
-			System.out.println ("Registering");
-			while(cc1.voter[i][0]!='\0')
-			{
-				if(cc1.voter[i][0]==voterid)
-				{
-					System.out.println ("voter id info already exists");
-					return 1;
-				}
-			i++;
-			}
-
-			System.out.println ("successfully registered");
-			cc1.nvoter++;
-			cc1.voter[i][0]=voterid;
-			cc1.voter[i][1]=0;
-			return 0;
-		}
-		catch(Exception ex)
-		{
-			System.out.println (ex);
-			return 2;
-		}	
+	@Override
+	public synchronized int initialise() throws RemoteException {
+		candidates.clear();
+		registeredVoters.clear();
+		votedVoters.clear();
+		System.out.println("Election state initialized");
+		return 0;
 	}
 
+	@Override
+	public synchronized int reset() throws RemoteException {
+		return initialise();
+	}
 
-	public int castvote(String s,int votid) throws java.rmi.RemoteException 
-	{
-		try
-		{
-			int i=0,j=0;
-			VotingClient cc2=new VotingClient();
-			while(cc2.voter[i][0]!='\0')
-			{
-				if(cc2.voter[i][0]==votid)
-				{
-					if( cc2.voter[i][1]==0)
-					{
-						while(cc2.cand[j][0]!=null)
-						{
-							if(cc2.cand[j][0].equals(s))
-							{
-								int t=Integer.parseInt(cc2.cand[j][1]);
-								t++;
-								cc2.cand[j][1]=Integer.toString(t);
-								System.out.println("vote count incresed by one for the selesvted candidate");	
-								return 0;	   
-							}	
-							j++;        
-						}
-						cc2.cand[j][0]=s;
-						cc2.cand[j][1]="1";
-						cc2.voter[i][1]=1;
-						System.out.println("new candidate added and set vote count set to 1");
-						return 1;		 
-					}
-					else return 3;
-				}
-				i++;
-			}  
-			System.out.println("voter id not found");
+	@Override
+	public synchronized int register(int voterid) throws RemoteException {
+		if (registeredVoters.contains(voterid)) {
+			return 1;
+		}
+		registeredVoters.add(voterid);
+		System.out.println("Registered voter: " + voterid);
+		return 0;
+	}
+
+	@Override
+	public synchronized int castvote(String name, int voterid) throws RemoteException {
+		String candidateName = normalize(name);
+		if (!registeredVoters.contains(voterid)) {
 			return 2;
 		}
-		catch(Exception ex)
-		{
-			System.out.println(ex);
-			return 4;
-		}			
-	}
-
-
-	public String[][] candidatelist() throws java.rmi.RemoteException
-	{
-		VotingClient cc3=new VotingClient();
-		System.out.println("Sending candidate list");
-		return(cc3.cand);
-	}
-
-
-	public int votecount(String name) throws java.rmi.RemoteException 
-	{
-		try
-		{
-			int j=0;
-			VotingClient cc3=new VotingClient();
-			while(cc3.voter[j][0]!='\0')
-			{
-				if(cc3.cand[j][0].equals(name))
-				{
-					System.out.println(" vote count for candidate requested ");
-					int t=Integer.parseInt(cc3.cand[j][1]);
-					return(t);
-				}
-				j++;
-			}
-			System.out.println(" i m here");
-			int t1=-1;
-			return(t1);
+		if (votedVoters.contains(voterid)) {
+			return 3;
 		}
-		catch(Exception Ex)
-		{ 
-			return -1;
-		}
+		int currentVotes = candidates.containsKey(candidateName) ? candidates.get(candidateName) : 0;
+		candidates.put(candidateName, currentVotes + 1);
+		votedVoters.add(voterid);
+		System.out.println("Vote recorded for " + candidateName + " by voter " + voterid);
+		return currentVotes == 0 ? 1 : 0;
 	}
 
+	@Override
+	public synchronized String[][] candidatelist() throws RemoteException {
+		String[][] result = new String[candidates.size()][2];
+		int index = 0;
+		for (Map.Entry<String, Integer> entry : candidates.entrySet()) {
+			result[index][0] = entry.getKey();
+			result[index][1] = Integer.toString(entry.getValue());
+			index++;
+		}
+		return result;
+	}
+
+	@Override
+	public synchronized int votecount(String name) throws RemoteException {
+		String candidateName = normalize(name);
+		Integer count = candidates.get(candidateName);
+		return count == null ? -1 : count;
+	}
+
+	private String normalize(String value) {
+		return value == null ? "" : value.trim().toUpperCase();
+	}
+
+	public synchronized List<String> snapshotCandidates() {
+		return new ArrayList<>(candidates.keySet());
+	}
+
+	public synchronized int registeredCount() {
+		return registeredVoters.size();
+	}
+
+	public synchronized int votedCount() {
+		return votedVoters.size();
+	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- 
- 
-
